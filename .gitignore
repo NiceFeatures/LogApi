@@ -353,3 +353,6 @@ MigrationBackup/
 # Visual Studio code settings
 #.vscode/
 
+
+# Project Context
+context.md

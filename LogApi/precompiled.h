@@ -29,6 +29,7 @@
 #endif
 
 // System
+#include <limits.h>
 #include <osconfig.h>
 
 // C++
