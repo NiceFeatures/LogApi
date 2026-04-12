@@ -1,6 +1,7 @@
+</p>
 <p align="center">
-    <a href="https://github.com/SmileYzn/LogApi/issues"><img alt="GitHub Issues" src="https://img.shields.io/github/issues-raw/smileyzn/LogApi?style=flat-square"></a>
-    <a href="https://github.com/SmileYzn/LogApi/actions"><img alt="GitHub Workflow Status" src="https://img.shields.io/github/actions/workflow/status/SmileYzn/LogApi/build.yml?branch=main&label=C/C++&style=flat-square"></a>
+    <img alt="Version" src="https://img.shields.io/badge/version-1.0.0-blue?style=flat-square">
+    <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square">
 </p>
 
 # ReHLDS Log API

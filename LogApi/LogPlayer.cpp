@@ -43,11 +43,13 @@ void CLogPlayer::Connect(edict_t *pEdict, const char *pszName,
 
 void CLogPlayer::Disconnect(edict_t *pEdict) {
   if (!FNullEnt(pEdict)) {
-    auto Auth = gLogUtil.GetAuthId(pEdict);
+    int entIndex = ENTINDEX(pEdict);
 
-    if (Auth) {
-      if (this->m_Players.find(Auth) != this->m_Players.end()) {
-        this->m_Players.erase(Auth);
+    for (auto it = this->m_Players.begin(); it != this->m_Players.end();) {
+      if (it->second.EntityId == entIndex) {
+        it = this->m_Players.erase(it);
+      } else {
+        ++it;
       }
     }
   }
@@ -120,28 +122,38 @@ LP_PLAYER_INFO CLogPlayer::GetPlayer(std::string Auth) {
   return nullptr;
 }
 
+LP_PLAYER_INFO CLogPlayer::GetPlayer(edict_t *pEdict) {
+  if (!FNullEnt(pEdict)) {
+    int entIndex = ENTINDEX(pEdict);
+
+    for (auto it = this->m_Players.begin(); it != this->m_Players.end(); ++it) {
+      if (it->second.EntityId == entIndex) {
+        return &it->second;
+      }
+    }
+  }
+
+  return nullptr;
+}
+
 nlohmann::ordered_json CLogPlayer::GetPlayerJson(edict_t *pEdict) {
   nlohmann::ordered_json PlayerJson;
 
   if (!FNullEnt(pEdict)) {
-    auto Auth = g_engfuncs.pfnGetPlayerAuthId(pEdict);
+    auto Player = this->GetPlayer(pEdict);
 
-    if (Auth) {
-      auto Player = this->GetPlayer(Auth);
-
-      if (Player != nullptr) {
-        PlayerJson = {{"EntityId", Player->EntityId},
-                      {"Auth", Player->Auth},
-                      {"Name", Player->Name},
-                      {"Address", Player->Address},
-                      {"UserId", Player->UserId},
-                      {"Team", Player->Team},
-                      {"Frags", Player->Frags},
-                      {"Deaths", Player->Deaths},
-                      {"Ping", Player->Ping},
-                      {"GameTime", Player->GameTime},
-                      {"ConnectTime", Player->ConnectTime}};
-      }
+    if (Player != nullptr) {
+      PlayerJson = {{"EntityId", Player->EntityId},
+                    {"Auth", Player->Auth},
+                    {"Name", Player->Name},
+                    {"Address", Player->Address},
+                    {"UserId", Player->UserId},
+                    {"Team", Player->Team},
+                    {"Frags", Player->Frags},
+                    {"Deaths", Player->Deaths},
+                    {"Ping", Player->Ping},
+                    {"GameTime", Player->GameTime},
+                    {"ConnectTime", Player->ConnectTime}};
     }
   }
 

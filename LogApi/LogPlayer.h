@@ -21,6 +21,7 @@ public:
   void Update(edict_t *pEdict);
   std::map<std::string, P_PLAYER_INFO> GetPlayers();
   LP_PLAYER_INFO GetPlayer(std::string Auth);
+  LP_PLAYER_INFO GetPlayer(edict_t *pEdict);
   nlohmann::ordered_json GetPlayerJson(edict_t *pEdict);
 
 private:
