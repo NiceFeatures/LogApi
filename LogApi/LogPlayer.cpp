@@ -159,3 +159,8 @@ nlohmann::ordered_json CLogPlayer::GetPlayerJson(edict_t *pEdict) {
 
   return PlayerJson;
 }
+
+void CLogPlayer::Clear() {
+  this->m_Players.clear();
+}
+

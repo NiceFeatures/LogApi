@@ -8,6 +8,10 @@ void CLogApi::ServerActivate() {
   // Plugin is running
   this->m_Running = true;
 
+  // Clear players
+  gLogPlayer.Clear();
+
+
   // If has Delay cvar
   if (gLogCvar.m_Delay) {
     // If has Delay cvar value
@@ -69,7 +73,11 @@ void CLogApi::ServerActivate() {
 void CLogApi::ServerDeactivate() {
   // Plugin is not running
   this->m_Running = false;
+
+  // Clear players
+  gLogPlayer.Clear();
 }
+
 
 // On server frame
 void CLogApi::ServerFrame() {

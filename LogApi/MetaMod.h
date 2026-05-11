@@ -12,6 +12,8 @@ void DLL_POST_ClientPutInServer(edict_t* pEntity);
 void DLL_POST_ClientKill(edict_t* pEntity);
 void DLL_POST_ClientUserInfoChanged(edict_t* pEntity, char* InfoBuffer);
 void DLL_POST_ClientCommand(edict_t* pEntity);
+void DLL_POST_ClientDisconnect(edict_t* pEntity);
+
 #pragma endregion
 
 #pragma region NEW_DLL_PRE

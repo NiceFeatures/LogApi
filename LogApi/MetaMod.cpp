@@ -114,6 +114,9 @@ C_DLLEXPORT int GetEntityAPI2_Post(DLL_FUNCTIONS *pFunctionTable,
 
   g_DLL_FunctionTable_Post.pfnClientCommand = DLL_POST_ClientCommand;
 
+  g_DLL_FunctionTable_Post.pfnClientDisconnect = DLL_POST_ClientDisconnect;
+
+
   memcpy(pFunctionTable, &g_DLL_FunctionTable_Post, sizeof(DLL_FUNCTIONS));
 
   return 1;
@@ -197,6 +200,16 @@ void DLL_POST_ClientCommand(edict_t *pEntity) {
 
   RETURN_META(MRES_IGNORED);
 }
+
+void DLL_POST_ClientDisconnect(edict_t *pEntity) {
+  gLogPlayer.Disconnect(pEntity);
+
+  gLogEvent.ClientDisconnect(pEntity, false, "");
+
+  RETURN_META(MRES_IGNORED);
+}
+
+
 #pragma endregion
 
 #pragma region NEW_DLL_PRE
