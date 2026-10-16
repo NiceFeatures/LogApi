@@ -199,11 +199,22 @@ void CLogApi::CallbackResult(CURL *ch, size_t Size, const char *Memory,
           }
         }
       } else {
-        // Log
-        LOG_CONSOLE(PLID,
-                    "[%s] Unknow response from server: HTTP Code %d, check "
-                    "log_api_address.",
-                    __func__, HttpResponseCode);
+        std::string responseBody = (Memory && Memory[0u] != '\0') ? Memory : "";
+        if (responseBody.length() > 256) {
+          responseBody = responseBody.substr(0, 256) + "...";
+        }
+
+        if (!responseBody.empty()) {
+          LOG_CONSOLE(PLID,
+                      "[%s] Unknown response from server: HTTP Code %ld (Response: %s), check "
+                      "log_api_address.",
+                      __func__, HttpResponseCode, responseBody.c_str());
+        } else {
+          LOG_CONSOLE(PLID,
+                      "[%s] Unknown response from server: HTTP Code %ld, check "
+                      "log_api_address.",
+                      __func__, HttpResponseCode);
+        }
       }
     }
   }

@@ -2,15 +2,55 @@
 
 CLogCurl gLogCurl;
 
+bool CLogCurl::HasSystemCaBundle() {
+#if defined(_WIN32)
+  // On Windows, Schannel integrates with Windows Certificate Store.
+  return true;
+#else
+  static const char *caPaths[] = {
+      "/etc/ssl/certs/ca-certificates.crt",
+      "/etc/pki/tls/certs/ca-bundle.crt",
+      "/usr/share/ssl/certs/ca-bundle.crt",
+      "/usr/local/share/certs/ca-root-nss.crt",
+      "/etc/ssl/cert.pem",
+      "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+      "/etc/ssl/ca-bundle.pem",
+      "curl-ca-bundle.crt",
+      "cacert.pem"};
+
+  for (const char *path : caPaths) {
+    FILE *f = fopen(path, "r");
+    if (f) {
+      fclose(f);
+      this->m_CaBundlePath = path;
+      return true;
+    }
+  }
+
+  return false;
+#endif
+}
+
 void CLogCurl::ServerActivate() {
   if (!this->m_MultiHandle) {
     this->m_RequestIndex = 0;
+
+    this->m_SslFallback = false;
+
+    this->m_CaBundlePath.clear();
 
     this->m_Data.clear();
 
     curl_global_init(CURL_GLOBAL_ALL);
 
     this->m_MultiHandle = curl_multi_init();
+
+    if (!this->HasSystemCaBundle()) {
+      this->m_SslFallback = true;
+      LOG_CONSOLE(PLID,
+                  "[%s] No system CA certificate bundle found. SSL verification fallback enabled.",
+                  __func__);
+    }
   }
 }
 
@@ -31,14 +71,55 @@ void CLogCurl::ServerFrame() {
         curl_easy_getinfo(MsgInfo->easy_handle, CURLINFO_PRIVATE, &Index);
 
         if (this->m_Data.find(Index) != this->m_Data.end()) {
-          gLogApi.CallbackResult(MsgInfo->easy_handle, this->m_Data[Index].Size,
-                                 this->m_Data[Index].Memory,
-                                 this->m_Data[Index].EventIndex);
+          if (MsgInfo->data.result == CURLE_OK) {
+            gLogApi.CallbackResult(MsgInfo->easy_handle,
+                                   this->m_Data[Index].Size,
+                                   this->m_Data[Index].Memory,
+                                   this->m_Data[Index].EventIndex);
+          } else {
+            bool isSslError = (MsgInfo->data.result == CURLE_PEER_FAILED_VERIFICATION ||
+                               MsgInfo->data.result == CURLE_SSL_CONNECT_ERROR ||
+                               MsgInfo->data.result == CURLE_SSL_CERTPROBLEM ||
+                               MsgInfo->data.result == CURLE_SSL_CIPHER
+#if defined(CURLE_SSL_CACERT_BADFILE)
+                               || MsgInfo->data.result == CURLE_SSL_CACERT_BADFILE
+#endif
+            );
 
-          free(this->m_Data[Index].Memory);
+            if (isSslError && !this->m_Data[Index].Retried) {
+              this->m_SslFallback = true;
+
+              LOG_CONSOLE(PLID,
+                          "[%s] SSL certificate verification failed: %s (code %d). "
+                          "Retrying with SSL verification fallback.",
+                          __func__,
+                          curl_easy_strerror(MsgInfo->data.result),
+                          MsgInfo->data.result);
+
+              this->PostJSON(this->m_Data[Index].Url.c_str(),
+                             this->m_Data[Index].Timeout,
+                             this->m_Data[Index].BearerToken,
+                             this->m_Data[Index].PostData,
+                             this->m_Data[Index].EventIndex,
+                             true);
+            } else {
+              LOG_CONSOLE(PLID,
+                          "[%s] Curl transfer failed: %s (code %d), check "
+                          "log_api_address.",
+                          __func__,
+                          curl_easy_strerror(MsgInfo->data.result),
+                          MsgInfo->data.result);
+            }
+          }
+
+          if (this->m_Data[Index].Memory) {
+            free(this->m_Data[Index].Memory);
+            this->m_Data[Index].Memory = NULL;
+          }
 
           if (this->m_Data[Index].Headers) {
             curl_slist_free_all(this->m_Data[Index].Headers);
+            this->m_Data[Index].Headers = NULL;
           }
 
           this->m_Data.erase(Index);
@@ -55,16 +136,24 @@ void CLogCurl::ServerFrame() {
 }
 
 void CLogCurl::PostJSON(const char *url, long Timeout, std::string BearerToken,
-                        std::string PostData, int EventIndex) {
+                        std::string PostData, int EventIndex, bool Retried) {
   if (this->m_MultiHandle) {
     if (url) {
       CURL *ch = curl_easy_init();
 
       if (ch) {
-        this->m_Data[this->m_RequestIndex] = {0};
+        P_CURL_MOD_MEMORY reqData;
+        reqData.Memory = NULL;
+        reqData.Size = 0;
+        reqData.EventIndex = EventIndex;
+        reqData.Headers = NULL;
+        reqData.Url = url;
+        reqData.PostData = PostData;
+        reqData.BearerToken = BearerToken;
+        reqData.Timeout = Timeout;
+        reqData.Retried = Retried;
 
-        this->m_Data[this->m_RequestIndex].EventIndex = EventIndex;
-        this->m_Data[this->m_RequestIndex].Headers = NULL;
+        this->m_Data[this->m_RequestIndex] = reqData;
 
         curl_easy_setopt(ch, CURLOPT_URL, url);
 
@@ -75,6 +164,8 @@ void CLogCurl::PostJSON(const char *url, long Timeout, std::string BearerToken,
         curl_easy_setopt(ch, CURLOPT_WRITEFUNCTION, this->WriteMemoryCallback);
 
         curl_easy_setopt(ch, CURLOPT_NOPROGRESS, 1L);
+
+        curl_easy_setopt(ch, CURLOPT_USERAGENT, "LogApi");
 
         curl_easy_setopt(ch, CURLOPT_POST, 1L);
 
@@ -96,8 +187,17 @@ void CLogCurl::PostJSON(const char *url, long Timeout, std::string BearerToken,
 
         this->m_Data[this->m_RequestIndex].Headers = chHeaders;
 
-        curl_easy_setopt(ch, CURLOPT_SSL_VERIFYPEER, 1L);
-        curl_easy_setopt(ch, CURLOPT_SSL_VERIFYHOST, 2L);
+        if (this->m_SslFallback) {
+          curl_easy_setopt(ch, CURLOPT_SSL_VERIFYPEER, 0L);
+          curl_easy_setopt(ch, CURLOPT_SSL_VERIFYHOST, 0L);
+        } else {
+          curl_easy_setopt(ch, CURLOPT_SSL_VERIFYPEER, 1L);
+          curl_easy_setopt(ch, CURLOPT_SSL_VERIFYHOST, 2L);
+
+          if (!this->m_CaBundlePath.empty()) {
+            curl_easy_setopt(ch, CURLOPT_CAINFO, this->m_CaBundlePath.c_str());
+          }
+        }
 
         curl_easy_setopt(ch, CURLOPT_WRITEDATA,
                          (void *)&this->m_Data[this->m_RequestIndex]);
